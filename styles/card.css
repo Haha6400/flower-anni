@@ -1,0 +1,737 @@
+/* ==========================================================================
+   Anniversary card
+   Layout: every object is positioned in "canvas units" (--u). The desktop
+   canvas is 100 × 62.5 units. Each state only changes per-object custom
+   properties (--tx, --ty, --r, --s, --o), which feed transform and opacity.
+   ========================================================================== */
+
+/* ---------- Design tokens ---------- */
+:root {
+  --bg-olive-dark:  #4F5A3A;
+  --bg-olive-light: #6B7650;
+  --letter-mint:    #C9D6CB;
+  --paper-cream:    #F3EEE3;
+  --paper-white:    #FBF8F1;
+  --paper-shadow:   rgba(40, 45, 28, .35);
+  --seal-red:       #7A1F2B;
+  --ink:            #2F3A2C;
+  --hint-ink:       #F3EEE3;
+  --btn-back-bg:    #7A1F2B;
+  --btn-back-fg:    #FFFFFF;
+  --btn-audio-bg:   rgba(0, 0, 0, .45);
+  --placeholder:    #B9B9B4;
+  --flower-edge:    #9DB37A;
+  --flower-line:    #C8D6A6;
+  --gift-ink:       #6B2A2A;
+
+  --font-script: 'Dancing Script', cursive;
+  --font-serif:  'Cormorant Garamond', Georgia, serif;
+  --fs-hint:     clamp(14px, 1.4vw, 16px);
+
+  --stage-max:   960px;
+  --radius-btn:  999px;
+  --tap-min:     44px;
+
+  --ease-std:    cubic-bezier(.4, 0, .2, 1);
+  --ease-spring: cubic-bezier(.34, 1.56, .64, 1);
+  --t-fold:      .8s;
+  --t-flap:      .6s;
+  --t-fade:      .4s;
+  --t-scene:     .6s;
+  --t-petal:     .9s;
+  --stagger:     .1s;
+  --spin:        3.3s;
+}
+
+/* ---------- Page ---------- */
+*, *::before, *::after { box-sizing: border-box; }
+[hidden] { display: none !important; }
+
+html { height: 100%; }
+body {
+  margin: 0;
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 24px 16px 88px;
+  overflow-x: hidden;
+  font-family: var(--font-serif);
+  color: var(--hint-ink);
+  background-color: var(--bg-olive-dark);
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='280' height='280' viewBox='0 0 280 280'%3E%3Cg fill='none' stroke='%23F3EEE3' stroke-opacity='.09' stroke-width='1.4' stroke-linecap='round'%3E%3Cpath d='M18 262 C 58 200, 74 132, 136 86'/%3E%3Cpath d='M70 170 C 52 160, 40 146, 36 128'/%3E%3Cpath d='M160 274 C 180 220, 214 190, 262 176'/%3E%3C/g%3E%3Cg fill='%23F3EEE3' fill-opacity='.07'%3E%3Cellipse cx='50' cy='204' rx='15' ry='5' transform='rotate(-40 50 204)'/%3E%3Cellipse cx='86' cy='150' rx='14' ry='5' transform='rotate(-58 86 150)'/%3E%3Cellipse cx='108' cy='118' rx='13' ry='4.5' transform='rotate(20 108 118)'/%3E%3Cellipse cx='36' cy='126' rx='10' ry='4' transform='rotate(70 36 126)'/%3E%3Cellipse cx='206' cy='204' rx='14' ry='5' transform='rotate(-20 206 204)'/%3E%3Cellipse cx='236' cy='182' rx='12' ry='4.5' transform='rotate(30 236 182)'/%3E%3Cg transform='translate(140 82)'%3E%3Ccircle r='5' cx='0' cy='-8'/%3E%3Ccircle r='5' cx='7.6' cy='-2.5'/%3E%3Ccircle r='5' cx='4.7' cy='6.5'/%3E%3Ccircle r='5' cx='-4.7' cy='6.5'/%3E%3Ccircle r='5' cx='-7.6' cy='-2.5'/%3E%3C/g%3E%3Cg transform='translate(226 52) scale(.7)'%3E%3Ccircle r='5' cx='0' cy='-8'/%3E%3Ccircle r='5' cx='7.6' cy='-2.5'/%3E%3Ccircle r='5' cx='4.7' cy='6.5'/%3E%3Ccircle r='5' cx='-4.7' cy='6.5'/%3E%3Ccircle r='5' cx='-7.6' cy='-2.5'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E"),
+    linear-gradient(160deg, var(--bg-olive-dark), var(--bg-olive-light));
+  background-attachment: fixed;
+}
+
+.sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
+
+/* ---------- Background video (record scene) ---------- */
+.bg-video {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 1.2s var(--ease-std);
+}
+.bg-video video { width: 100%; height: 100%; object-fit: cover; }
+.bg-video::after { /* soft dim so captions and hints stay readable */
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(20, 25, 10, .35);
+}
+.bg-video::before { /* extra darkness for the gift view */
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(10, 12, 5, .45);
+  opacity: 0;
+  transition: opacity 1.2s var(--ease-std);
+}
+body.has-video .bg-video { opacity: 1; }
+body[data-state="gift"] .bg-video::before { opacity: 1; }
+
+/* ---------- Card, stage, canvas ---------- */
+.card {
+  position: relative;
+  z-index: 1;
+  width: min(var(--stage-max), 100vw - 32px, (100dvh - 140px) * 1.6);
+  container-type: inline-size;
+}
+.card > * { --u: 1cqw; }          /* 1 canvas unit; resolves against .card */
+
+.stage {
+  position: relative;
+  height: calc(62.5 * var(--u));
+  transition: opacity .25s var(--ease-std);
+}
+.card.is-fading .stage { opacity: 0; }
+
+.canvas {
+  position: absolute;
+  left: calc(var(--ox, 0) * var(--u));
+  top:  calc(var(--oy, 0) * var(--u));
+  width:  calc(100 * var(--u));
+  height: calc(62.5 * var(--u));
+}
+
+.scene {
+  position: absolute;
+  inset: 0;
+  transition: opacity var(--t-scene) var(--ease-std), transform var(--t-scene) var(--ease-std);
+}
+
+/* Generic positioned object: position from --x/--y/--w/--h, motion from --tx/--ty/--r/--s/--o */
+.obj {
+  --tx: 0; --ty: 0; --r: 0; --s: 1; --o: 1;
+  position: absolute;
+  left:   calc(var(--x) * var(--u));
+  top:    calc(var(--y) * var(--u));
+  width:  calc(var(--w) * var(--u));
+  height: calc(var(--h) * var(--u));
+  margin: 0;
+  transform:
+    translate(calc(var(--tx) * var(--u)), calc(var(--ty) * var(--u)))
+    rotate(calc(var(--r) * 1deg))
+    scale(var(--s));
+  opacity: var(--o);
+  transition:
+    transform var(--t-fold) var(--ease-std),
+    opacity var(--t-fade) var(--ease-std);
+}
+.obj svg { display: block; width: 100%; height: 100%; overflow: visible; }
+
+[role="button"] { cursor: pointer; }
+.obj:focus-visible, .gift-text:focus-visible {
+  outline: 2px dashed var(--paper-cream);
+  outline-offset: 4px;
+}
+
+/* ---------- Photos (with placeholder) ---------- */
+.photo {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--placeholder);
+}
+.photo img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.photo.is-missing img { visibility: hidden; }
+.photo.is-missing::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: center / 38% no-repeat url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23FFFFFF' stroke-opacity='.8' stroke-width='1.5' stroke-linejoin='round'%3E%3Crect x='3' y='5' width='18' height='14' rx='2'/%3E%3Ccircle cx='9' cy='10' r='1.6'/%3E%3Cpath d='M4 17l5-5 4 4 2.5-2.5L20 17'/%3E%3C/svg%3E");
+}
+
+/* ==========================================================================
+   Scene: envelope (sealed, envelope, letter, photos)
+   ========================================================================== */
+/* Flowers sit above the envelope. In the sealed state they cross on its
+   front with their stems tucked under the wax seal; elsewhere they flank it.
+   transform-origin is the stem end, so rotation pivots there. */
+/* The flower SVGs carry 20 units of padding inside their viewBox (4 canvas
+   units per side) so Safari, which clips SVG content to its box, never cuts a
+   petal. Box and transform-origin include that padding. */
+.flower-left  { --x: 13; --y: 16; --w: 24; --h: 42; transform-origin: 48.67% 80.76%; }
+.flower-right { --x: 56; --y: 16; --w: 22; --h: 36; transform-origin: 50% 105.56%; }
+.flower {
+  pointer-events: none;
+  filter: drop-shadow(0 calc(.4 * var(--u)) calc(.6 * var(--u)) rgba(20, 25, 10, .35));
+}
+.card[data-state="sealed"] .flower-left  { --tx: 28.3; --ty: -1; --r: -40; }
+.card[data-state="sealed"] .flower-right { --tx: -25.3; --ty: -1; --r: 38; }
+/* Opened envelope: blossoms rest on the envelope's bottom corners */
+.card[data-state="envelope"] .flower-left  { --tx: 20; --ty: 15; --r: -60; }
+.card[data-state="envelope"] .flower-right { --tx: -10; --ty: 20; --r: 35; }
+.card:is([data-state="letter"], [data-state="photos"]) .flower-left  { --tx: -8; }
+/* Letter and photos: keep the right flower clear of the polaroids, main photo, hint and caption */
+.card[data-state="letter"] .flower-right { --tx: 18; --ty: -12; --r: 8; }
+.card[data-state="photos"] .flower-right { --tx: 20; --ty: 4; }
+
+.envelope { --x: 32; --y: 28; --w: 36; --h: 30; }
+
+.env-back {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  border-radius: calc(.4 * var(--u));
+  background: linear-gradient(180deg, #EFE9DC, var(--paper-cream));
+  box-shadow: 0 calc(.8 * var(--u)) calc(2.4 * var(--u)) var(--paper-shadow);
+}
+
+.pocket {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+/* Flap: rotates open around its top edge. The z-index swap is delayed to the
+   midpoint of the turn, so the flap passes behind the letter when it opens. */
+.flap {
+  --x: 0; --y: 0; --w: 36; --h: 17;
+  z-index: 6;
+  pointer-events: none;
+  transform-origin: 50% 0;
+  transform: perspective(calc(80 * var(--u))) rotateX(0deg);
+  transition: transform var(--t-flap) var(--ease-std), z-index 0s linear calc(var(--t-flap) / 2);
+  filter: drop-shadow(0 calc(.3 * var(--u)) calc(.4 * var(--u)) rgba(40, 45, 28, .18));
+}
+.card:not([data-state="sealed"]) .flap {
+  transform: perspective(calc(80 * var(--u))) rotateX(180deg);
+  z-index: 1;
+}
+/* Folding shut: contents slide in first, then the flap closes */
+.card[data-state="sealed"] .flap { transition-delay: .25s, calc(.25s + var(--t-flap) / 2); }
+
+/* Letter */
+.letter {
+  --x: 3; --y: 1.5; --w: 30; --h: 42;
+  --s: .66;
+  display: flex;
+  flex-direction: column;
+  z-index: 2;
+  transform-origin: 50% 0;
+  padding: calc(3 * var(--u)) calc(2.6 * var(--u));
+  color: var(--ink);
+  background: var(--letter-mint) linear-gradient(170deg, rgba(255, 255, 255, .18), rgba(0, 0, 0, .04));
+  filter: drop-shadow(0 calc(.4 * var(--u)) calc(.8 * var(--u)) rgba(30, 35, 20, .25));
+}
+.letter::before { /* scalloped top edge */
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(-1.2 * var(--u));
+  height: calc(1.25 * var(--u));
+  background: radial-gradient(circle at 50% 100%, var(--letter-mint) calc(1.2 * var(--u)), transparent calc(1.25 * var(--u)))
+              0 100% / calc(2.4 * var(--u)) calc(1.25 * var(--u)) round no-repeat;
+}
+.letter-greeting {
+  margin: 0;
+  font: italic 600 calc(3.6 * var(--u)) / 1.1 var(--font-serif);
+  text-align: center;
+}
+.letter-subtitle {
+  margin: calc(.3 * var(--u)) 0 calc(1.4 * var(--u));
+  font: italic 600 calc(1.8 * var(--u)) / 1.2 var(--font-serif);
+  text-align: center;
+}
+.letter-body {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  overflow: hidden;
+  font: italic 600 calc(1.6 * var(--u)) / 1.4 var(--font-serif);
+  white-space: pre-line;
+}
+
+/* Polaroids */
+.polaroid {
+  --x: 22; --y: 4; --w: 10; --h: 12;
+  --ty: 12;
+  --r: calc((var(--i) - 1) * 4);
+  z-index: 3;
+  padding: calc(.6 * var(--u)) calc(.6 * var(--u)) calc(2.2 * var(--u));
+  background: var(--paper-white);
+  box-shadow: 0 calc(.3 * var(--u)) calc(.9 * var(--u)) rgba(30, 35, 20, .3);
+}
+
+/* Main photo */
+.main-photo {
+  --x: 22; --y: 3; --w: 14; --h: 17;
+  --ty: 10; --s: .9;
+  z-index: 4;
+  transform-origin: 0 0;
+  padding: calc(.7 * var(--u)) calc(.7 * var(--u)) calc(2.6 * var(--u));
+  background: var(--paper-white);
+  box-shadow: 0 calc(.4 * var(--u)) calc(1.2 * var(--u)) rgba(30, 35, 20, .35);
+}
+.corner { /* photo-corner mount: the "top-left corner" affordance */
+  position: absolute;
+  z-index: 1;
+  left: calc(-.5 * var(--u));
+  top: calc(-.5 * var(--u));
+  width: calc(3.2 * var(--u));
+  height: calc(3.2 * var(--u));
+  background: linear-gradient(135deg, var(--seal-red) 50%, transparent 50%);
+  opacity: 0;
+  transition: opacity var(--t-fade) var(--ease-std);
+}
+.card[data-state="photos"] .corner {
+  opacity: 1;
+  animation: pulse 1.6s var(--ease-std) infinite;
+}
+
+/* Wax seal */
+/* Seal lives outside the envelope group so it can sit above the flowers;
+   its position tracks the envelope's (stage x 45.5, y 39). */
+.seal {
+  --x: 45.5; --y: 39; --w: 9; --h: 9;
+  z-index: 7;
+  border-radius: 50%;
+  filter: drop-shadow(0 calc(.3 * var(--u)) calc(.5 * var(--u)) rgba(30, 10, 10, .45));
+}
+.seal[role="button"]::after { /* attention ring */
+  content: '';
+  position: absolute;
+  inset: -12%;
+  border: 2px solid rgba(243, 238, 227, .55);
+  border-radius: 50%;
+  animation: ring 2s var(--ease-std) infinite;
+}
+
+/* Heading above the envelope, first view only */
+.cover-title {
+  --x: 10; --y: 9; --w: 80;
+  --o: 0; --ty: -2;
+  pointer-events: none;
+  text-align: center;
+  color: var(--hint-ink);
+  font: italic 600 calc(7.5 * var(--u)) / 1.1 var(--font-serif);
+  text-shadow: 0 2px 10px rgba(0, 0, 0, .35);
+}
+.card[data-state="sealed"] .cover-title { --o: 1; --ty: 0; }
+
+.photos-caption {
+  --x: 63; --y: 5; --w: 28;
+  --o: 0;
+  pointer-events: none;
+  font: italic 600 calc(1.9 * var(--u)) / 1.3 var(--font-serif);
+  text-shadow: 0 1px 6px rgba(0, 0, 0, .35);
+}
+
+/* ---------- State: envelope (flap open, letter peeks out) ---------- */
+.card[data-state="envelope"] .envelope { --ty: 4; }
+.card[data-state="envelope"] .letter   { --ty: -14; transition-delay: .35s; }
+
+/* ---------- Seal leaves once opened ---------- */
+.seal:not([role="button"]) { pointer-events: none; }
+.card:is([data-state="envelope"], [data-state="letter"], [data-state="photos"], [data-state="music"], [data-state="gift"]) .seal {
+  --ty: 1; --s: 1.4; --o: 0;
+}
+
+/* ---------- State: letter (reading view) ---------- */
+.card:is([data-state="letter"], [data-state="photos"]) .envelope { --ty: 22; }
+.card[data-state="letter"] .letter     { --tx: -8; --ty: -48.5; --s: 1.1; }
+.card[data-state="letter"] .polaroid   { --tx: calc(6 + var(--i) * 3); --ty: calc(-17 - var(--i) * 1.5); --r: calc(6 + var(--i) * 5); }
+.card[data-state="letter"] .main-photo { --tx: 5; --ty: -44; --r: 4; --s: 1; }
+.card:is([data-state="letter"], [data-state="photos"]) .polaroid { transition-delay: calc(var(--i) * var(--stagger)); }
+
+/* ---------- State: photos ---------- */
+.card[data-state="photos"] .letter     { --tx: -29.5; --ty: -37.5; --s: .7; --r: -8; --o: .45; }
+.card[data-state="photos"] .polaroid[data-i="0"] { --tx: -27; --ty: -20; --r: -6; }
+.card[data-state="photos"] .polaroid[data-i="1"] { --tx: -9;  --ty: -19; --r: 2; }
+.card[data-state="photos"] .polaroid[data-i="2"] { --tx: 9;   --ty: -20; --r: 7; }
+.card[data-state="photos"] .main-photo { --tx: -14; --ty: -50; --r: -2; --s: 1.4; }
+.card[data-state="photos"] .photos-caption { --o: 1; transition-delay: .5s; }
+
+/* ==========================================================================
+   Scene switching
+   ========================================================================== */
+.scene-music, .scene-gift { opacity: 0; pointer-events: none; }
+.scene-music { transform: scale(.96); }
+.card[data-state="music"] .scene-music,
+.card[data-state="gift"] .scene-gift { opacity: 1; pointer-events: auto; transform: none; }
+.card:is([data-state="music"], [data-state="gift"]) .scene-envelope { opacity: 0; pointer-events: none; }
+
+/* ==========================================================================
+   Scene: music
+   ========================================================================== */
+.m-calla  { --x: 16; --y: 16; --w: 12; --h: 30; --r: -12; filter: drop-shadow(0 4px 6px rgba(20, 25, 10, .35)); }
+.record   { --x: 46; --y: 7;  --w: 34; --h: 34; border-radius: 50%; }
+.notes    { --x: 79; --y: 4;  --w: 12; --h: 9; }
+.m-photo  { --x: 25; --y: 6;  --w: 24; --h: 31; --r: -3; }
+.m-lily   { --x: 70; --y: 20; --w: 22; --h: 34; filter: drop-shadow(0 4px 6px rgba(20, 25, 10, .35)); }
+.m-caption {
+  --x: 22; --y: 44.5; --w: 56;
+  pointer-events: none;
+  text-align: center;
+  font: 600 calc(1.9 * var(--u)) / 1.3 var(--font-serif);
+  text-shadow: 0 1px 6px rgba(0, 0, 0, .35);
+}
+
+.record-disc {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  box-shadow: 0 calc(.8 * var(--u)) calc(2 * var(--u)) rgba(0, 0, 0, .45);
+  animation: spin var(--spin) linear infinite paused;
+}
+.card.is-playing[data-state="music"] .record-disc { animation-play-state: running; }
+.record-sheen {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  pointer-events: none;
+  background: conic-gradient(from 20deg, transparent 0 8%, rgba(255, 255, 255, .13) 14%, transparent 22% 52%, rgba(255, 255, 255, .08) 60%, transparent 70%);
+}
+.record-title { font: italic 600 13px var(--font-serif); fill: var(--paper-cream); }
+
+.card.is-playing[data-state="music"] .notes svg { animation: bob 2.4s ease-in-out infinite; }
+
+.m-photo-back, .m-photo-front {
+  position: absolute;
+  inset: 0;
+  background: var(--paper-white);
+  box-shadow: 0 calc(.4 * var(--u)) calc(1.2 * var(--u)) rgba(30, 35, 20, .35);
+}
+.m-photo-back   { transform: rotate(4deg) translate(calc(1.2 * var(--u)), calc(.8 * var(--u))); }
+.m-photo-back-2 { transform: rotate(-2deg) translate(calc(.6 * var(--u)), calc(1.6 * var(--u))); }
+.m-photo-front  { padding: calc(1 * var(--u)) calc(1 * var(--u)) calc(4 * var(--u)); }
+.m-photo .clip {
+  position: absolute;
+  right: calc(2 * var(--u));
+  top: calc(-2.2 * var(--u));
+  width: calc(2.2 * var(--u));
+  height: calc(5 * var(--u));
+}
+
+/* ==========================================================================
+   Scene: gift
+   ========================================================================== */
+.gift-flower { --x: 28; --y: 9; --w: 44; --h: 44; }
+.gift-sway {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 calc(.6 * var(--u)) calc(1.4 * var(--u)) rgba(20, 25, 10, .35));
+}
+.card[data-state="gift"] .gift-sway { animation: sway 7s ease-in-out infinite; }
+
+.petal {
+  transform-box: view-box;
+  transform-origin: 100px 100px;
+  transform: rotate(calc(var(--i) * 72deg - 40deg)) scale(.15);
+  opacity: 0;
+  stroke-linejoin: round;
+  transition:
+    transform var(--t-petal) var(--ease-spring),
+    opacity .35s var(--ease-std);
+}
+.card[data-state="gift"] .petal {
+  transform: rotate(calc(var(--i) * 72deg)) scale(1);
+  opacity: 1;
+  transition-delay: calc(.25s + var(--i) * .06s);
+}
+.petal-edge { fill: var(--flower-edge); stroke: var(--flower-edge); stroke-width: 10; }
+.petal-band { fill: var(--paper-cream); stroke: var(--paper-cream); stroke-width: 7; }
+.petal-line { fill: var(--flower-line); stroke: var(--flower-line); stroke-width: 3.5; }
+.petal-fill { fill: #F6F1E6; }
+
+.gift-text {
+  position: absolute;
+  left: 32%;
+  right: 32%;
+  top: 50%;
+  margin: 0;
+  transform: translateY(-50%);
+  text-align: center;
+  color: var(--gift-ink);
+  font: 600 calc(1.7 * var(--u)) / 1.3 var(--font-serif);
+  opacity: 0;
+  transition: opacity .6s var(--ease-std);
+  outline-offset: 6px;
+}
+.card[data-state="gift"] .gift-text { opacity: 1; transition-delay: 1s; }
+
+/* ==========================================================================
+   Hint
+   ========================================================================== */
+.hint {
+  position: absolute;
+  z-index: 10;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: calc(22 * var(--u));
+  font: italic 600 var(--fs-hint) / 1.25 var(--font-serif);
+  color: var(--hint-ink);
+  text-shadow: 0 1px 6px rgba(0, 0, 0, .45);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .3s var(--ease-std);
+}
+.hint.is-visible { opacity: 1; }
+.hint-arrow {
+  --nudge: 4px;
+  flex: none;
+  width: 40px;
+  height: 20px;
+  order: 2;
+  animation: nudge 1.4s ease-in-out infinite;
+}
+.hint[data-for="sealed"]   { left: calc(70 * var(--u)); top: calc(41 * var(--u)); }
+.hint[data-for="envelope"] { left: calc(13 * var(--u)); top: calc(14 * var(--u)); }
+.hint[data-for="letter"]   { left: calc(78 * var(--u)); top: calc(37 * var(--u)); }
+.hint[data-for="photos"]   { left: calc(18 * var(--u)); top: calc(1 * var(--u)); }
+.hint[data-for="music"]    { left: calc(74 * var(--u)); top: calc(51 * var(--u)); flex-direction: column; align-items: flex-start; }
+
+/* Arrow direction: right is default; left and up flip the arrow */
+.hint:is([data-for="sealed"], [data-for="letter"]) .hint-arrow { order: 0; scale: -1 1; --nudge: -4px; }
+.hint[data-for="music"] .hint-arrow { order: 0; rotate: -90deg; margin-left: calc(4 * var(--u)); }
+
+/* ==========================================================================
+   Buttons
+   ========================================================================== */
+.btn-back, .btn-sound {
+  position: fixed;
+  bottom: 20px;
+  z-index: 20;
+  border: 0;
+  cursor: pointer;
+  color: #fff;
+  -webkit-tap-highlight-color: transparent;
+  transition: opacity .3s var(--ease-std), transform .2s var(--ease-std);
+}
+.btn-back:focus-visible, .btn-sound:focus-visible { outline: 2px solid var(--paper-cream); outline-offset: 3px; }
+
+.btn-back {
+  left: 20px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--tap-min);
+  padding: 8px 20px 8px 16px;
+  border-radius: var(--radius-btn);
+  background: var(--btn-back-bg);
+  color: var(--btn-back-fg);
+  font: 600 17px/1 var(--font-serif);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, .3);
+}
+.btn-back svg { width: 20px; height: 20px; }
+.btn-back:active:not([aria-disabled="true"]) { transform: scale(.96); }
+.btn-back[aria-disabled="true"] { opacity: .45; cursor: default; }
+
+.btn-sound {
+  right: 20px;
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: var(--btn-audio-bg);
+}
+.btn-sound svg { width: 24px; height: 24px; }
+.btn-sound .icon-on { display: none; }
+.btn-sound[aria-pressed="true"] .icon-on { display: inline; }
+.btn-sound[aria-pressed="true"] .icon-off { display: none; }
+.btn-sound[aria-disabled="true"] { opacity: .45; cursor: default; }
+.btn-sound:active:not([aria-disabled="true"]) { transform: scale(.94); }
+
+/* ==========================================================================
+   Gift view: falling blossoms and countdown
+   ========================================================================== */
+.blossoms {
+  position: fixed;
+  inset: 0;
+  z-index: 0;              /* above the page background, behind the card */
+  overflow: hidden;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 1.2s var(--ease-std);
+}
+.card[data-state="gift"] ~ .blossoms { opacity: 1; }
+
+.blossom {                 /* falls straight down */
+  position: absolute;
+  top: 0;
+  left: var(--left);
+  animation: petal-fall var(--dur) linear var(--delay) infinite paused;
+}
+.blossom i {               /* sways and turns while falling */
+  display: block;
+  width: var(--size);
+  height: calc(var(--size) * .78);
+  border-radius: 150% 0 150% 0;
+  background: linear-gradient(135deg, #F8E3EC, #E4B4C8);
+  opacity: .9;
+  animation: petal-sway calc(var(--dur) / 3) ease-in-out var(--delay) infinite alternate paused;
+}
+.blossom.is-cream i { background: linear-gradient(135deg, #FBF8F1, #EADFCB); }
+.card[data-state="gift"] ~ .blossoms .blossom,
+.card[data-state="gift"] ~ .blossoms .blossom i { animation-play-state: running; }
+
+.countdown {
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  z-index: 15;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: calc(100vw - 32px);
+  text-align: center;
+  color: var(--hint-ink);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .8s var(--ease-std);
+}
+.card[data-state="gift"] ~ .countdown { opacity: 1; transition-delay: .8s; }
+.countdown-caption {
+  margin: 0 0 8px;
+  font: italic 600 18px / 1.3 var(--font-serif);
+  text-shadow: 0 1px 6px rgba(0, 0, 0, .4);
+}
+.countdown-units { display: flex; justify-content: center; gap: 10px; }
+.cd-unit {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 64px;
+  padding: 6px 8px 5px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, .22);
+}
+.cd-num {
+  font: 600 28px / 1 var(--font-serif);
+  font-variant-numeric: lining-nums tabular-nums;
+}
+.cd-label {
+  margin-top: 3px;
+  font: 600 11px / 1 var(--font-serif);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  opacity: .85;
+}
+
+/* ==========================================================================
+   Keyframes (transform / opacity only)
+   ========================================================================== */
+@keyframes spin  { to { transform: rotate(360deg); } }
+@keyframes bob   { 50% { transform: translateY(-6%); } }
+@keyframes sway  { 0%, 100% { transform: rotate(-3deg); } 50% { transform: rotate(3deg); } }
+@keyframes pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .55; transform: scale(1.15); } }
+@keyframes ring  { 0% { opacity: .9; transform: scale(.9); } 100% { opacity: 0; transform: scale(1.3); } }
+@keyframes nudge { 50% { translate: var(--nudge) 0; } }
+@keyframes petal-fall { from { transform: translateY(-8vh); } to { transform: translateY(108vh); } }
+@keyframes petal-sway {
+  from { transform: translateX(calc(var(--sway) * -1)) rotate(0deg); }
+  to   { transform: translateX(var(--sway)) rotate(var(--spin)); }
+}
+
+/* ==========================================================================
+   Mobile (< 768px): narrower, taller canvas window; hint below the stage
+   Visible canvas: x 18…82, height 78 units (content shifted down 6).
+   ========================================================================== */
+@media (max-width: 767px) {
+  .countdown { bottom: 84px; }                 /* sits above the Back and speaker buttons */
+  .countdown-caption { font-size: 16px; }
+  .countdown-units { gap: 6px; }
+  .cd-unit { min-width: 54px; padding: 5px 6px 4px; }
+  .cd-num { font-size: 22px; }
+  .cd-label { font-size: 9.5px; }
+  .cover-title { --x: 18; --w: 64; font-size: calc(8 * var(--u)); }
+  body { padding: 16px 8px 92px; }
+  .card { width: min(100vw - 16px, (100dvh - 190px) * 64 / 78); }
+  .card > * { --u: calc(100cqw / 64); }
+
+  .stage {
+    height: calc(78 * var(--u));
+    overflow: hidden;
+    overflow: clip;
+    mask-image: linear-gradient(to bottom, #000 88%, transparent);
+  }
+  .canvas { --ox: -18; --oy: 6; }
+
+  /* letter: centred, larger for reading */
+  .card[data-state="letter"] .envelope   { --ty: 36; }
+  .card[data-state="photos"] .envelope   { --ty: 36; }
+  .card[data-state="letter"] .letter     { --tx: 0; --ty: -63.5; --s: 1.45; }
+  .card[data-state="letter"] .polaroid   { --tx: calc(14 + var(--i) * 2); --ty: calc(-18 - var(--i) * 2); }
+  .card[data-state="letter"] .main-photo { --o: 0; }
+  /* No room beside the letter on phones: fade the flowers instead of leaving cut-off slivers */
+  .card:is([data-state="letter"], [data-state="photos"]) .flower { --o: 0; }
+
+  /* photos: main photo on top, polaroid row below */
+  .card[data-state="photos"] .letter     { --o: 0; }
+  .card[data-state="photos"] .main-photo { --tx: -16.25; --ty: -65; --s: 1.75; }
+  .card[data-state="photos"] .polaroid[data-i="0"] { --tx: -32.5; --ty: -27; }
+  .card[data-state="photos"] .polaroid[data-i="1"] { --tx: -9;    --ty: -27; }
+  .card[data-state="photos"] .polaroid[data-i="2"] { --tx: 14.5;  --ty: -27; }
+  .photos-caption { --x: 20; --y: 33; --w: 60; text-align: center; font-size: calc(2.4 * var(--u)); }
+
+  /* music */
+  .m-calla   { --x: 19; }
+  .notes     { --x: 70; }
+  .m-lily    { --x: 64; }
+  .m-caption { --y: 52; font-size: calc(2.6 * var(--u)); }
+
+  /* gift */
+  .gift-flower { --x: 22; --y: 6; --w: 56; --h: 56; }
+  .gift-text   { font-size: calc(2.3 * var(--u)); }
+
+  /* hint sits in a bar below the stage */
+  .hint, .hint[data-for] {
+    position: static;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    max-width: none;
+    min-height: 2.6em;
+    margin-top: 8px;
+    padding: 0 12px;
+    text-align: center;
+  }
+  .hint .hint-arrow { display: none; }
+}
+
+/* ==========================================================================
+   Reduced motion: fades only
+   ========================================================================== */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    transition-property: opacity !important;
+    transition-duration: .25s !important;
+    transition-delay: 0s !important;
+    animation: none !important;
+  }
+  .blossoms { display: none; }
+}

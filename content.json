@@ -1,0 +1,33 @@
+{
+  "recipientName": "Việt Anh",
+  "coverTitle": "",
+  "letter": {
+    "greeting": "Dear Anh,",
+    "subtitle": "Ordinary days have become special",
+    "body": "Thank you babi, for always being by my side, on the sunny days that shine so bright, and on the nights we cried huhu. \nWith you, even the small things become memories worth keeping. A late dinner, a hug for no reason, or just a message. \nI'm not good at saying pretty words, so I just want to say: I love you more than I ever let on. \nHere's to many more chapters together."
+  },
+  "mainPhoto": "assets/main.jpg",
+  "photos": ["assets/p1.jpg", "assets/p2.jpg", "assets/p3.jpg"],
+  "photosCaption": "Thank you for walking this road with me.",
+  "music": {
+    "src": "assets/song.mp3",
+    "autoplay": false,
+    "video": "assets/bg-video.mp4",
+    "title": "Love song",
+    "caption": "Tap the record to hear a song for you."
+  },
+  "gift": { "text": "A little gift for you. Love you!" },
+  "countdown": {
+    "date": "2027-02-26T00:00:00",
+    "caption": "Counting down to the day we meet again.",
+    "labels": { "days": "Days", "hours": "Hours", "minutes": "Minutes", "seconds": "Seconds" }
+  },
+  "hints": {
+    "seal": "Click the wax seal",
+    "letter": "Click the letter",
+    "photos": "Click the photo",
+    "mainPhoto": "Click the top-left corner of the photo",
+    "gift": "Click the flower"
+  },
+  "labels": { "back": "Start over", "soundOn": "Play music", "soundOff": "Pause music" }
+}
