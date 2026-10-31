@@ -214,8 +214,8 @@ function buildFlower() {
   const NS = 'http://www.w3.org/2000/svg';
   const group = $('.petals');
   // Each layer is drawn for all petals before the next layer, which gives one
-  // outline around the whole flower (edge, cream band, inner line, fill).
-  for (const layer of ['edge', 'band', 'line', 'fill']) {
+  // outline around the whole flower (thin gold edge, then the cream fill).
+  for (const layer of ['edge', 'fill']) {
     for (let i = 0; i < 5; i++) {
       const use = document.createElementNS(NS, 'use');
       use.setAttribute('href', '#petal');
@@ -349,20 +349,21 @@ function syncVideo() {
 }
 
 // ---------- Gift view: falling blossoms ----------
-function buildBlossoms(count = 22) {
+function buildBlossoms(count = 12) {
   const box = $('.blossoms');
   const rand = (min, max) => min + Math.random() * (max - min);
   for (let i = 0; i < count; i++) {
     const petal = document.createElement('span');
-    petal.className = i % 4 === 0 ? 'blossom is-cream' : 'blossom';
-    const dur = rand(9, 16);
+    petal.className = i % 3 === 0 ? 'blossom is-cream' : 'blossom';
+    const dur = rand(11, 18);
     petal.style.cssText = [
       `--left:${rand(0, 100).toFixed(1)}vw`,
-      `--size:${rand(10, 20).toFixed(1)}px`,
+      `--size:${rand(18, 30).toFixed(1)}px`,
       `--dur:${dur.toFixed(1)}s`,
       `--delay:${(-rand(0, dur)).toFixed(1)}s`,   // negative: already mid-fall when shown
-      `--sway:${rand(14, 40).toFixed(0)}px`,
-      `--spin:${rand(90, 300).toFixed(0)}deg`,
+      `--sway:${rand(24, 60).toFixed(0)}px`,
+      `--tilt:${rand(0, 360).toFixed(0)}deg`,
+      `--spin:${rand(20, 70).toFixed(0)}deg`,     // slight turn while swaying
     ].join(';');
     petal.append(document.createElement('i'));
     box.append(petal);
